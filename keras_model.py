@@ -10,6 +10,8 @@ from keras.models import Model
 from keras.layers.wrappers import TimeDistributed
 from keras.optimizers import Adam
 from keras.models import load_model
+from keras.utils import plot_model
+import pydot, graphviz
 import keras
 keras.backend.set_image_data_format('channels_first')
 from IPython import embed
@@ -69,6 +71,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         print('ERROR: Unknown doa_objective: {}'.format(doa_objective))
         exit()
     model.summary()
+    plot_model(model, to_file = "./plot_model.png")
     return model
 
 
