@@ -191,13 +191,23 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         )(doa_rnn)
 
     # FC - DOA
-    doa = doa_rnn
+    doa = spec_rnn
+#    doa = doa_rnn
     for nb_fnn_filt in fnn_size:
         doa = TimeDistributed(Dense(nb_fnn_filt))(doa)
         doa = Dropout(dropout_rate)(doa)
 
     doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
     doa = Activation('tanh', name='doa_out')(doa)
+    
+    src = spec_rnn
+    #src = doa_rnn
+    for nb_fnn_filt in fnn_size:
+        src = TimeDistributed(Dense(nb_fnn_filt))(src)
+        src = Dropout(dropout_rate)(src)
+
+    src = TimeDistributed(Dense(data_out[2][-1]))(src)
+    src = Activation('tanh', name='src_out')(src)
 
     # FC - SED
     sed = spec_rnn
@@ -213,8 +223,8 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         model.compile(optimizer=Adam(), loss=['binary_crossentropy', 'mse'], loss_weights=weights)
     elif doa_objective is 'masked_mse':
         doa_concat = Concatenate(axis=-1, name='doa_concat')([sed, doa])
-        model = Model(inputs=spec_start, outputs=[sed, doa_concat])
-        model.compile(optimizer=Adam(), loss=['binary_crossentropy', masked_mse], loss_weights=weights)
+        model = Model(inputs=spec_start, outputs=[sed, doa_concat, src])
+        model.compile(optimizer=Adam(), loss=['binary_crossentropy', masked_mse, 'binary_crossentropy'], loss_weights=weights)
     else:
         print('ERROR: Unknown doa_objective: {}'.format(doa_objective))
         exit()

@@ -11,6 +11,8 @@ import random
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
+from keras.utils import np_utils
+
 
 class DataGenerator(object):
     def __init__(self, params, split=1, shuffle=True, per_file=False, is_eval=False):
@@ -76,7 +78,8 @@ class DataGenerator(object):
         else:
             label_shape = [
                 (self._batch_size, self._label_seq_len, self._nb_classes),
-                (self._batch_size, self._label_seq_len, self._nb_classes*3)
+                (self._batch_size, self._label_seq_len, self._nb_classes*3),
+                (self._batch_size, self._label_seq_len, 3)
             ]
         return feat_shape, label_shape
 
@@ -192,11 +195,12 @@ class DataGenerator(object):
                     feat = self._split_in_seqs(feat, self._feature_seq_len)
                     feat = np.transpose(feat, (0, 3, 1, 2))
                     label = self._split_in_seqs(label, self._label_seq_len)
-
                     label = [
-                        label[:, :, :self._nb_classes],  # SED labels
-                        label # SED + DOA labels
-                         ]
+                        label[:, :, :self._nb_classes],                                # SED labels
+                        label,                                                         # SED + DOA labels
+                        np_utils.to_categorical(label[:, :, :self._nb_classes].sum(2), num_classes=3) # Number of sources
+                        ]
+                    
                     yield feat, label
 
     def _split_in_seqs(self, data, _seq_len):
