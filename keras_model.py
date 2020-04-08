@@ -200,12 +200,11 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
     doa = Activation('tanh', name='doa_out')(doa)
     
-    src = spec_rnn
-    #src = doa_rnn
+    #src = spec_rnn
+    src = doa_rnn
     for nb_fnn_filt in fnn_size:
         src = TimeDistributed(Dense(nb_fnn_filt))(src)
         src = Dropout(dropout_rate)(src)
-
     src = TimeDistributed(Dense(data_out[2][-1]))(src)
     src = Activation('tanh', name='src_out')(src)
 
@@ -214,6 +213,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     for nb_fnn_filt in fnn_size:
         sed = TimeDistributed(Dense(nb_fnn_filt))(sed)
         sed = Dropout(dropout_rate)(sed)
+    sed = Concatenate(axis=-1, name='spec_concat')([sed, src])
     sed = TimeDistributed(Dense(data_out[0][-1]))(sed)
     sed = Activation('sigmoid', name='sed_out')(sed)
 
