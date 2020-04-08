@@ -5,6 +5,8 @@
 import os
 import sys
 import numpy as np
+import matplotlib as mpl
+mpl.use('Agg')
 import matplotlib.pyplot as plot
 import cls_feature_class
 import cls_data_generator
@@ -14,6 +16,9 @@ import parameter
 import time
 plot.switch_backend('agg')
 from IPython import embed
+
+
+import matplotlib.pyplot as plt
 
 
 def collect_test_labels(_data_gen_test, _data_out, _nb_classes, quick_test):

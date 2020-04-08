@@ -1,16 +1,18 @@
 # Contains routines for labels creation, features extraction and normalization
 #
 
-
 import os
 import numpy as np
 import scipy.io.wavfile as wav
 from sklearn import preprocessing
 from sklearn.externals import joblib
 from IPython import embed
+import matplotlib as mpl
+mpl.use('Agg')
 import matplotlib.pyplot as plot
 import librosa
-plot.switch_backend('agg')
+#plot.switch_backend('agg')
+import matplotlib.pyplot as plt
 import math
 
 
@@ -101,8 +103,15 @@ class FeatureClass:
             mag_spectra = np.abs(linear_spectra[:, :, ch_cnt])**2
             mel_spectra = np.dot(mag_spectra, self._mel_wts)
             log_mel_spectra = librosa.power_to_db(mel_spectra)
+            #print(log_mel_spectra.shape)
+            #plt.pcolormesh(log_mel_spectra.T)
+            #plt.show()
             mel_feat[:, :, ch_cnt] = log_mel_spectra
+        #print(mel_feat.shape)
         mel_feat = mel_feat.reshape((linear_spectra.shape[0], self._nb_mel_bins * linear_spectra.shape[-1]))
+        #print(mel_feat.shape)
+        #plt.pcolormesh(mel_feat.T)
+        #64plt.show()
         return mel_feat
 
     def _get_foa_intensity_vectors(self, linear_spectra):
@@ -138,6 +147,10 @@ class FeatureClass:
 
     def _get_spectrogram_for_file(self, audio_filename):
         audio_in, fs = self._load_audio(os.path.join(self._aud_dir, audio_filename))
+        #print("fs =", fs, "length =", len(audio_in))
+        #print(audio_in.shape)
+        #plt.plot(audio_in.T[0])
+        #plt.show()
         audio_spec = self._spectrogram(audio_in)
         return audio_spec
 
@@ -185,27 +198,37 @@ class FeatureClass:
 
             #extract mel
             mel_spect = self._get_mel_spectrogram(spect)
+            #print(mel_spect.T.shape)
+            #plt.pcolormesh(mel_spect.T)
+            #plt.show()
 
             feat = None
             if self._dataset is 'foa':
                 # extract intensity vectors
                 foa_iv = self._get_foa_intensity_vectors(spect)
                 feat = np.concatenate((mel_spect, foa_iv), axis=-1)
+                #print(foa_iv.T.shape)
+                #plt.pcolormesh(foa_iv.T)
+                #plt.show()
             elif self._dataset is 'mic':
                 # extract gcc
                 gcc = self._get_gcc(spect)
                 feat = np.concatenate((mel_spect, gcc), axis=-1)
+                #print(gcc.T.shape)
+                #plt.pcolormesh(gcc.T)
+                #plt.show()
             else:
                 print('ERROR: Unknown dataset format {}'.format(self._dataset))
                 exit()
-
-            # plot.figure()
-            # plot.subplot(211), plot.imshow(mel_spect.T)
-            # plot.subplot(212), plot.imshow(foa_iv.T)
-            # plot.show()
+                
+            #plot.figure()
+            #plot.subplot(211), plot.imshow(mel_spect.T)
+            #plot.subplot(212), plot.imshow(foa_iv.T)
+            #plot.show()
 
             if feat is not None:
-                print('{}: {}, {}'.format(file_cnt, file_name, feat.shape ))
+                print('{}: {}, {}, {}'.format(file_cnt, file_name, feat.shape, mel_spect.shape))
+                #print("\n\n")
                 np.save(os.path.join(self._feat_dir, '{}.npy'.format(wav_filename.split('.')[0])), feat)
 
     def preprocess_features(self):

@@ -8,12 +8,12 @@ import cls_feature_class
 from IPython import embed
 from collections import deque
 import random
-
+import matplotlib as mpl
+mpl.use('Agg')
+import matplotlib.pyplot as plt
 
 class DataGenerator(object):
-    def __init__(
-            self, params, split=1, shuffle=True, per_file=False, is_eval=False
-    ):
+    def __init__(self, params, split=1, shuffle=True, per_file=False, is_eval=False):
         self._per_file = per_file
         self._is_eval = is_eval
         self._splits = np.array(split)

@@ -124,6 +124,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     print(spec_start)
     # CNN
     spec_cnn = spec_start
+    doa_cnn = spec_start
     for i, convCnt in enumerate(f_pool_size):
         spec_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(spec_cnn)
         spec_cnn = BatchNormalization()(spec_cnn)
@@ -131,7 +132,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         spec_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(spec_cnn)
         spec_cnn = Dropout(dropout_rate)(spec_cnn)
 
-
+    """
     # ASPP module
     atrous_rates = (6, 12, 18)
     b0 = Conv2D(64, (1, 1), padding='same', use_bias=False, name='aspp0')(spec_cnn)
@@ -157,22 +158,40 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
 
     # concatenate ASPP branches & project
     spec_cnn = Concatenate()([b4, b0, b1, b2, b3])
-    print(spec_cnn)
-    
+    """
     
     spec_cnn = Permute((2, 1, 3))(spec_cnn)
     # RNN
     spec_rnn = Reshape((data_out[0][-2], -1))(spec_cnn)
-    print("before RNN", spec_rnn)
     for nb_rnn_filt in rnn_size:
         spec_rnn = Bidirectional(
             GRU(nb_rnn_filt, activation='tanh', dropout=dropout_rate, recurrent_dropout=dropout_rate,
                 return_sequences=True),
             merge_mode='mul'
         )(spec_rnn)
+            
+    
+    
+    # DOA branch
+    for i, convCnt in enumerate(f_pool_size):
+        doa_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(doa_cnn)
+        doa_cnn = BatchNormalization()(doa_cnn)
+        doa_cnn = Activation('relu')(doa_cnn)
+        doa_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(doa_cnn)
+        doa_cnn = Dropout(dropout_rate)(doa_cnn)
+        
+    doa_cnn = Permute((2, 1, 3))(doa_cnn)
+    # RNN
+    doa_rnn = Reshape((data_out[0][-2], -1))(doa_cnn)
+    for nb_rnn_filt in rnn_size:
+        doa_rnn = Bidirectional(
+            GRU(nb_rnn_filt, activation='tanh', dropout=dropout_rate, recurrent_dropout=dropout_rate,
+                return_sequences=True),
+            merge_mode='mul'
+        )(doa_rnn)
 
     # FC - DOA
-    doa = spec_rnn
+    doa = doa_rnn
     for nb_fnn_filt in fnn_size:
         doa = TimeDistributed(Dense(nb_fnn_filt))(doa)
         doa = Dropout(dropout_rate)(doa)
