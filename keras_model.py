@@ -250,9 +250,47 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
             GRU(nb_rnn_filt, activation='tanh', dropout=dropout_rate, recurrent_dropout=dropout_rate,
                 return_sequences=True),
             merge_mode='mul'
-        )(doa_rnn)
+        )(doa_rnn)            
             
-            
+    
+    # FC - SRC
+    src = src_rnn
+    for nb_fnn_filt in fnn_size:
+        src = TimeDistributed(Dense(nb_fnn_filt))(src)
+        src = Dropout(dropout_rate)(src)
+    src = TimeDistributed(Dense(data_out[2][-1]))(src)
+    src = Activation('softmax', name='src_out')(src)
+
+    # FC - SAD
+    sad = spec_rnn
+    print(sad)
+    for nb_fnn_filt in fnn_size:
+        sad = TimeDistributed(Dense(nb_fnn_filt))(sad)
+        sad = Dropout(dropout_rate)(sad)
+    print(sad)
+    sad = Flatten()(sad)
+    sad = Dense(data_out[3][-1])(sad)
+    print(sad)
+    sad = Activation('sigmoid', name='sad_out')(sad)    
+    
+    # FC - SED only
+    sed_only = sed_rnn
+    for nb_fnn_filt in fnn_size:
+        sed_only = TimeDistributed(Dense(nb_fnn_filt))(sed_only)
+        sed_only = Dropout(dropout_rate)(sed_only)
+    sed_only = TimeDistributed(Dense(data_out[4][-1]))(sed_only)
+    sed_only = Activation('sigmoid', name='sed_only_out')(sed_only)
+
+    
+
+    # FC - SED
+    sed = spec_rnn
+    for nb_fnn_filt in fnn_size:
+        sed = TimeDistributed(Dense(nb_fnn_filt))(sed)
+        sed = Dropout(dropout_rate)(sed)
+    sed = Concatenate(axis=-1, name='spec_concat')([sed, src])
+    sed = TimeDistributed(Dense(data_out[0][-1]))(sed)
+    sed = Activation('sigmoid', name='sed_out')(sed)
 
     # FC - DOA
     doa = doa_rnn
@@ -263,47 +301,6 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
     doa = Activation('tanh', name='doa_out')(doa)
     
-    # FC - SRC
-    src = src_rnn
-    for nb_fnn_filt in fnn_size:
-        src = TimeDistributed(Dense(nb_fnn_filt))(src)
-        src = Dropout(dropout_rate)(src)
-    src = TimeDistributed(Dense(data_out[2][-1]))(src)
-    src = Activation('softmax', name='src_out')(src)
-
-    # FC - SED
-    sed = spec_rnn
-    for nb_fnn_filt in fnn_size:
-        sed = TimeDistributed(Dense(nb_fnn_filt))(sed)
-        sed = Dropout(dropout_rate)(sed)
-    #sed = Concatenate(axis=-1, name='spec_concat')([sed, src])
-    sed = TimeDistributed(Dense(data_out[0][-1]))(sed)
-    sed = Activation('sigmoid', name='sed_out')(sed)
-
-    # FC - SAD
-    sad = sad_rnn
-    print(sad)
-    for nb_fnn_filt in fnn_size:
-        sad = TimeDistributed(Dense(nb_fnn_filt))(sad)
-        sad = Dropout(dropout_rate)(sad)
-    #sed = Concatenate(axis=-1, name='spec_concat')([sed, src])
-    print(sad)
-    sad = Flatten()(sad)
-    sad = Dense(data_out[3][-1])(sad)
-    print(sad)
-    sad = Activation('sigmoid', name='sad_out')(sad)
-    
-    
-    # FC - SED only
-    sed_only = sed_rnn
-    for nb_fnn_filt in fnn_size:
-        sed_only = TimeDistributed(Dense(nb_fnn_filt))(sed_only)
-        sed_only = Dropout(dropout_rate)(sed_only)
-    #sed = Concatenate(axis=-1, name='spec_concat')([sed_only, src])
-    sed_only = TimeDistributed(Dense(data_out[4][-1]))(sed_only)
-    sed_only = Activation('sigmoid', name='sed_only_out')(sed_only)
-    
-    
 
     model = None
     if doa_objective is 'mse':
@@ -312,7 +309,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     elif doa_objective is 'masked_mse':
         doa_concat = Concatenate(axis=-1, name='doa_concat')([sed, doa])
         model = Model(inputs=spec_start, outputs=[sed, doa_concat, src, sad, sed_only])
-        model.compile(optimizer=Adam(), loss=['binary_crossentropy', masked_mse, 'binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy'], loss_weights=weights)
+        model.compile(optimizer=Adam(), loss=['binary_crossentropy', masked_mse, 'binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy'], loss_weights=weights, metrics=['accuracy'])
     else:
         print('ERROR: Unknown doa_objective: {}'.format(doa_objective))
         exit()
