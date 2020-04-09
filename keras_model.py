@@ -23,7 +23,7 @@ from keras.engine import InputSpec
 from keras.utils import conv_utils
 from keras.layers import AveragePooling2D
 from keras.layers import DepthwiseConv2D
-from keras.layers import ZeroPadding2D, Flatten
+from keras.layers import ZeroPadding2D, Flatten, Multiply
 
 class BilinearUpsampling(Layer):
     """Just a simple bilinear upsampling layer. Works only with TF.
@@ -126,6 +126,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     spec_cnn = spec_start
     sad_cnn = spec_start
     doa_cnn = spec_start
+    doa_only_cnn = spec_start
     src_cnn = spec_start
     sed_cnn = spec_start
     # SED branch
@@ -252,6 +253,24 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
             merge_mode='mul'
         )(doa_rnn)            
             
+    # DOA only branch
+    for i, convCnt in enumerate(f_pool_size):
+        doa_only_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(doa_only_cnn)
+        doa_only_cnn = BatchNormalization()(doa_only_cnn)
+        doa_only_cnn = Activation('relu')(doa_only_cnn)
+        doa_only_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(doa_only_cnn)
+        doa_only_cnn = Dropout(dropout_rate)(doa_only_cnn)
+        
+    doa_only_cnn = Permute((2, 1, 3))(doa_only_cnn)
+    # RNN
+    doa_only_rnn = Reshape((data_out[0][-2], -1))(doa_only_cnn)
+    for nb_rnn_filt in rnn_size:
+        doa_only_rnn = Bidirectional(
+            GRU(nb_rnn_filt, activation='tanh', dropout=dropout_rate, recurrent_dropout=dropout_rate,
+                return_sequences=True),
+            merge_mode='mul'
+        )(doa_only_rnn)            
+
     
     # FC - SRC
     src = src_rnn
@@ -267,10 +286,8 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     for nb_fnn_filt in fnn_size:
         sad = TimeDistributed(Dense(nb_fnn_filt))(sad)
         sad = Dropout(dropout_rate)(sad)
-    print(sad)
     sad = Flatten()(sad)
     sad = Dense(data_out[3][-1])(sad)
-    print(sad)
     sad = Activation('sigmoid', name='sad_out')(sad)    
     
     # FC - SED only
@@ -280,6 +297,14 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         sed_only = Dropout(dropout_rate)(sed_only)
     sed_only = TimeDistributed(Dense(data_out[4][-1]))(sed_only)
     sed_only = Activation('sigmoid', name='sed_only_out')(sed_only)
+    
+    # FC - DOA only
+    doa_only = doa_only_rnn
+    for nb_fnn_filt in fnn_size:
+        doa_only = TimeDistributed(Dense(nb_fnn_filt))(doa_only)
+        doa_only = Dropout(dropout_rate)(doa_only)
+    doa_only = TimeDistributed(Dense(data_out[1][-1]))(doa_only)
+    doa_only = Activation('tanh', name='doa_only_out')(doa_only)
 
     
 
@@ -290,6 +315,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         sed = Dropout(dropout_rate)(sed)
     sed = Concatenate(axis=-1, name='spec_concat')([sed, src])
     sed = TimeDistributed(Dense(data_out[0][-1]))(sed)
+    sed = Multiply(name="sad_masked")([sed, sad])
     sed = Activation('sigmoid', name='sed_out')(sed)
 
     # FC - DOA
@@ -297,7 +323,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     for nb_fnn_filt in fnn_size:
         doa = TimeDistributed(Dense(nb_fnn_filt))(doa)
         doa = Dropout(dropout_rate)(doa)
-
+    doa = Concatenate(axis=-1, name='doa_src_concat')([doa, src])
     doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
     doa = Activation('tanh', name='doa_out')(doa)
     
@@ -308,8 +334,8 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         model.compile(optimizer=Adam(), loss=['binary_crossentropy', 'mse', 'binary_crossentropy'], loss_weights=weights)
     elif doa_objective is 'masked_mse':
         doa_concat = Concatenate(axis=-1, name='doa_concat')([sed, doa])
-        model = Model(inputs=spec_start, outputs=[sed, doa_concat, src, sad, sed_only])
-        model.compile(optimizer=Adam(), loss=['binary_crossentropy', masked_mse, 'binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy'], loss_weights=weights, metrics=['accuracy'])
+        model = Model(inputs=spec_start, outputs=[sed, doa_concat, src, sad, sed_only, doa_only])
+        model.compile(optimizer=Adam(), loss=['binary_crossentropy', masked_mse, 'binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy', 'mse'], loss_weights=weights, metrics=['accuracy'])
     else:
         print('ERROR: Unknown doa_objective: {}'.format(doa_objective))
         exit()
