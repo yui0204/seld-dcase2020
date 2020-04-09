@@ -125,6 +125,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     # CNN
     spec_cnn = spec_start
     doa_cnn = spec_start
+    src_cnn = spec_start
     for i, convCnt in enumerate(f_pool_size):
         spec_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(spec_cnn)
         spec_cnn = BatchNormalization()(spec_cnn)
@@ -172,6 +173,25 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
             
     
     
+    # SRC branch
+    for i, convCnt in enumerate(f_pool_size):
+        src_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(src_cnn)
+        src_cnn = BatchNormalization()(src_cnn)
+        src_cnn = Activation('relu')(src_cnn)
+        src_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(src_cnn)
+        src_cnn = Dropout(dropout_rate)(src_cnn)
+        
+    src_cnn = Permute((2, 1, 3))(src_cnn)
+    # RNN
+    src_rnn = Reshape((data_out[0][-2], -1))(src_cnn)
+    for nb_rnn_filt in rnn_size:
+        src_rnn = Bidirectional(
+            GRU(nb_rnn_filt, activation='tanh', dropout=dropout_rate, recurrent_dropout=dropout_rate,
+                return_sequences=True),
+            merge_mode='mul'
+        )(src_rnn)
+            
+            
     # DOA branch
     for i, convCnt in enumerate(f_pool_size):
         doa_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(doa_cnn)
@@ -189,10 +209,11 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
                 return_sequences=True),
             merge_mode='mul'
         )(doa_rnn)
+            
+            
 
     # FC - DOA
-    doa = spec_rnn
-#    doa = doa_rnn
+    doa = doa_rnn
     for nb_fnn_filt in fnn_size:
         doa = TimeDistributed(Dense(nb_fnn_filt))(doa)
         doa = Dropout(dropout_rate)(doa)
@@ -200,8 +221,8 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
     doa = Activation('tanh', name='doa_out')(doa)
     
-    #src = spec_rnn
-    src = doa_rnn
+    
+    src = src_rnn
     for nb_fnn_filt in fnn_size:
         src = TimeDistributed(Dense(nb_fnn_filt))(src)
         src = Dropout(dropout_rate)(src)
