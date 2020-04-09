@@ -23,7 +23,7 @@ from keras.engine import InputSpec
 from keras.utils import conv_utils
 from keras.layers import AveragePooling2D
 from keras.layers import DepthwiseConv2D
-from keras.layers import ZeroPadding2D
+from keras.layers import ZeroPadding2D, Flatten
 
 class BilinearUpsampling(Layer):
     """Just a simple bilinear upsampling layer. Works only with TF.
@@ -124,8 +124,11 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     print(spec_start)
     # CNN
     spec_cnn = spec_start
+    sad_cnn = spec_start
     doa_cnn = spec_start
     src_cnn = spec_start
+    sed_cnn = spec_start
+    # SED branch
     for i, convCnt in enumerate(f_pool_size):
         spec_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(spec_cnn)
         spec_cnn = BatchNormalization()(spec_cnn)
@@ -170,6 +173,45 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
                 return_sequences=True),
             merge_mode='mul'
         )(spec_rnn)
+            
+        
+    # SAD branch
+    for i, convCnt in enumerate(f_pool_size):
+        sad_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(sad_cnn)
+        sad_cnn = BatchNormalization()(sad_cnn)
+        sad_cnn = Activation('relu')(sad_cnn)
+        sad_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(sad_cnn)
+        sad_cnn = Dropout(dropout_rate)(sad_cnn)
+    
+    sad_cnn = Permute((2, 1, 3))(sad_cnn)
+    # RNN
+    sad_rnn = Reshape((data_out[0][-2], -1))(sad_cnn)
+    for nb_rnn_filt in rnn_size:
+        sad_rnn = Bidirectional(
+            GRU(nb_rnn_filt, activation='tanh', dropout=dropout_rate, recurrent_dropout=dropout_rate,
+                return_sequences=True),
+            merge_mode='mul'
+        )(sad_rnn)
+            
+            
+
+    # SED branch
+    for i, convCnt in enumerate(f_pool_size):
+        sed_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(sed_cnn)
+        sed_cnn = BatchNormalization()(sed_cnn)
+        sed_cnn = Activation('relu')(sed_cnn)
+        sed_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(sed_cnn)
+        sed_cnn = Dropout(dropout_rate)(sed_cnn)
+    
+    sed_cnn = Permute((2, 1, 3))(sed_cnn)
+    # RNN
+    sed_rnn = Reshape((data_out[0][-2], -1))(sed_cnn)
+    for nb_rnn_filt in rnn_size:
+        sed_rnn = Bidirectional(
+            GRU(nb_rnn_filt, activation='tanh', dropout=dropout_rate, recurrent_dropout=dropout_rate,
+                return_sequences=True),
+            merge_mode='mul'
+        )(sed_rnn)
             
     
     
@@ -221,31 +263,56 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
     doa = Activation('tanh', name='doa_out')(doa)
     
-    
+    # FC - SRC
     src = src_rnn
     for nb_fnn_filt in fnn_size:
         src = TimeDistributed(Dense(nb_fnn_filt))(src)
         src = Dropout(dropout_rate)(src)
     src = TimeDistributed(Dense(data_out[2][-1]))(src)
-    src = Activation('tanh', name='src_out')(src)
+    src = Activation('softmax', name='src_out')(src)
 
     # FC - SED
     sed = spec_rnn
     for nb_fnn_filt in fnn_size:
         sed = TimeDistributed(Dense(nb_fnn_filt))(sed)
         sed = Dropout(dropout_rate)(sed)
-    sed = Concatenate(axis=-1, name='spec_concat')([sed, src])
+    #sed = Concatenate(axis=-1, name='spec_concat')([sed, src])
     sed = TimeDistributed(Dense(data_out[0][-1]))(sed)
     sed = Activation('sigmoid', name='sed_out')(sed)
 
+    # FC - SAD
+    sad = sad_rnn
+    print(sad)
+    for nb_fnn_filt in fnn_size:
+        sad = TimeDistributed(Dense(nb_fnn_filt))(sad)
+        sad = Dropout(dropout_rate)(sad)
+    #sed = Concatenate(axis=-1, name='spec_concat')([sed, src])
+    print(sad)
+    sad = Flatten()(sad)
+    sad = Dense(data_out[3][-1])(sad)
+    print(sad)
+    sad = Activation('sigmoid', name='sad_out')(sad)
+    
+    
+    # FC - SED only
+    sed_only = sed_rnn
+    for nb_fnn_filt in fnn_size:
+        sed_only = TimeDistributed(Dense(nb_fnn_filt))(sed_only)
+        sed_only = Dropout(dropout_rate)(sed_only)
+    #sed = Concatenate(axis=-1, name='spec_concat')([sed_only, src])
+    sed_only = TimeDistributed(Dense(data_out[4][-1]))(sed_only)
+    sed_only = Activation('sigmoid', name='sed_only_out')(sed_only)
+    
+    
+
     model = None
     if doa_objective is 'mse':
-        model = Model(inputs=spec_start, outputs=[sed, doa])
-        model.compile(optimizer=Adam(), loss=['binary_crossentropy', 'mse'], loss_weights=weights)
+        model = Model(inputs=spec_start, outputs=[sed, doa, src])
+        model.compile(optimizer=Adam(), loss=['binary_crossentropy', 'mse', 'binary_crossentropy'], loss_weights=weights)
     elif doa_objective is 'masked_mse':
         doa_concat = Concatenate(axis=-1, name='doa_concat')([sed, doa])
-        model = Model(inputs=spec_start, outputs=[sed, doa_concat, src])
-        model.compile(optimizer=Adam(), loss=['binary_crossentropy', masked_mse, 'binary_crossentropy'], loss_weights=weights)
+        model = Model(inputs=spec_start, outputs=[sed, doa_concat, src, sad, sed_only])
+        model.compile(optimizer=Adam(), loss=['binary_crossentropy', masked_mse, 'binary_crossentropy', 'binary_crossentropy', 'binary_crossentropy'], loss_weights=weights)
     else:
         print('ERROR: Unknown doa_objective: {}'.format(doa_objective))
         exit()
