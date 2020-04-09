@@ -320,9 +320,10 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         sed = Dropout(dropout_rate)(sed)
 #    sed = Concatenate(axis=-1, name='spec_concat')([sed, src])
     sed = TimeDistributed(Dense(data_out[0][-1]))(sed)
-    sed = Multiply(name="sad_masked")([sed, sad])
     sed = Activation('sigmoid', name='sed_out')(sed)
-
+    sed = Multiply(name="sad_masked")([sed, sad])
+    
+    
     # FC - DOA
     doa = doa_rnn
     for nb_fnn_filt in fnn_size:
@@ -331,7 +332,8 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     doa = Concatenate(axis=-1, name='doa_src_concat')([doa, src])
     doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
     doa = Activation('tanh', name='doa_out')(doa)
-    
+    mask = Concatenate(axis=-1)([sed, sed, sed])    
+    doa = Multiply(name="sed_masked")([doa, mask])    
 
     model = None
     if doa_objective is 'mse':
