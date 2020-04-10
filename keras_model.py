@@ -330,11 +330,14 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     for nb_fnn_filt in fnn_size:
         doa = TimeDistributed(Dense(nb_fnn_filt))(doa)
         doa = Dropout(dropout_rate)(doa)
-    doa = Concatenate(axis=-1, name='doa_src_concat')([doa, src])
+    #doa = Concatenate(axis=-1, name='doa_src_concat')([doa, src])
     doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
+    sad_mask = Concatenate(axis=-1)([sad, sad, sad])    
+    doa = Multiply(name="doa_sad_masked")([doa, sad_mask])
+    doa = Multiply(name="doa_src_masked")([doa, src])
     doa = Activation('tanh', name='doa_out')(doa)
-    mask = Concatenate(axis=-1)([sed, sed, sed])    
-    doa = Multiply(name="sed_masked")([doa, mask])    
+    sed_mask = Concatenate(axis=-1)([sed, sed, sed])    
+    doa = Multiply(name="sed_masked")([doa, sed_mask])    
 
     model = None
     if doa_objective is 'mse':
