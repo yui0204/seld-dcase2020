@@ -322,6 +322,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     sed = TimeDistributed(Dense(data_out[0][-1]))(sed)
     sed = Activation('sigmoid', name='sed_out')(sed)
     sed = Multiply(name="sad_masked")([sed, sad])
+    sed = Multiply(name="src_masked")([sed, src])
     
     
     # FC - DOA
