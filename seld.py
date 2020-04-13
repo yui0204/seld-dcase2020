@@ -386,7 +386,7 @@ def main(argv):
             shutil.rmtree("results")
             os.mkdir("./results")
             
-    src_masked_loss[epoch_cnt] = hist.history.get('src_masked_loss')[-1]
+    src_masked_loss[epoch_cnt] = hist.history.get('sed_out_loss')[-1]
     doa_concat_loss[epoch_cnt] = hist.history.get('doa_concat_loss')[-1]
     src_out_loss[epoch_cnt] = hist.history.get('src_out_loss')[-1]
     sad_out_loss[epoch_cnt] = hist.history.get('sad_out_loss')[-1]
@@ -398,22 +398,22 @@ def main(argv):
     plot.grid(True)
 
     plot.subplot(512)
-    plot.plot(range(nb_epoch), src_masked_loss, label='train loss')
+    plot.plot(range(nb_epoch), src_masked_loss, label='sed loss')
     plot.legend()
     plot.grid(True)
 
     plot.subplot(513)
-    plot.plot(range(nb_epoch), doa_concat_loss, label='train loss')
+    plot.plot(range(nb_epoch), doa_concat_loss, label='doa loss')
     plot.legend()
     plot.grid(True)
 
     plot.subplot(514)
-    plot.plot(range(nb_epoch), src_out_loss, label='train loss')
+    plot.plot(range(nb_epoch), src_out_loss, label='src loss')
     plot.legend()
     plot.grid(True)
     
     plot.subplot(515)
-    plot.plot(range(nb_epoch), sad_out_loss, label='train loss')
+    plot.plot(range(nb_epoch), sad_out_loss, label='sad loss')
     plot.legend()
     plot.grid(True)
 

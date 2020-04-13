@@ -123,7 +123,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
               rnn_size, fnn_size, weights, doa_objective):
     # model definition
     spec_start = Input(shape=(data_in[-3], data_in[-2], data_in[-1]))
-    print(spec_start)
+    
     # CNN
     spec_cnn = spec_start
     sad_cnn = spec_start
@@ -136,14 +136,75 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
 #    sad_cnn = Lambda(lambda y: y[:,:4,:,:])(sad_cnn)
 #    src_cnn = Lambda(lambda y: y[:,4:,:,:])(src_cnn)
 
-    # SED branch
+    # SAD branch
     for i, convCnt in enumerate(f_pool_size):
+        sad_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(sad_cnn)
+        sad_cnn = BatchNormalization()(sad_cnn)
+        sad_cnn = Activation('relu')(sad_cnn)
+        sad_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(sad_cnn)
+        sad_cnn = Dropout(dropout_rate)(sad_cnn)
+    
+    sad_cnn = Permute((2, 1, 3))(sad_cnn)
+    # RNN
+    sad_rnn = Reshape((data_out[0][-2], -1))(sad_cnn)
+    for nb_rnn_filt in rnn_size:
+        sad_rnn = Bidirectional(
+            GRU(nb_rnn_filt, activation='tanh', dropout=dropout_rate, recurrent_dropout=dropout_rate,
+                return_sequences=True),
+            merge_mode='mul'
+        )(sad_rnn)
+    
+    
+    # SRC branch
+    for i, convCnt in enumerate(f_pool_size):
+        src_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(src_cnn)
+        src_cnn = BatchNormalization()(src_cnn)
+        src_cnn = Activation('relu')(src_cnn)
+        src_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(src_cnn)
+        src_cnn = Dropout(dropout_rate)(src_cnn)
+        
+    src_cnn = Permute((2, 1, 3))(src_cnn)
+    # RNN
+    src_rnn = Reshape((data_out[0][-2], -1))(src_cnn)
+    for nb_rnn_filt in rnn_size:
+        src_rnn = Bidirectional(
+            GRU(nb_rnn_filt, activation='tanh', dropout=dropout_rate, recurrent_dropout=dropout_rate,
+                return_sequences=True),
+            merge_mode='mul'
+        )(src_rnn)
+            
+            
+    # FC - SRC
+    src = src_rnn
+    for nb_fnn_filt in fnn_size:
+        src = TimeDistributed(Dense(nb_fnn_filt))(src)
+        src = Dropout(dropout_rate)(src)
+    src = TimeDistributed(Dense(data_out[2][-1]))(src)
+    src = Activation('sigmoid', name='src_out')(src)
+
+    # FC - SAD
+    sad = sad_rnn
+    for nb_fnn_filt in fnn_size:
+        sad = TimeDistributed(Dense(nb_fnn_filt))(sad)
+        sad = Dropout(dropout_rate)(sad)
+    sad = Flatten()(sad)
+    sad = Dense(data_out[3][-1])(sad)
+    sad = Activation('sigmoid', name='sad_out')(sad)    
+    
+    
+
+
+    # SED branch
+#    spec_cnn = Multiply(name="sed_sad_masked")([spec_cnn, sad])
+    for i, convCnt in enumerate(f_pool_size):
+        if i == 1:
+            spec_cnn = Multiply()([spec_cnn, src])
+#            spec_cnn = Concatenate(axis=-1)([spec_cnn, src])
         spec_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(spec_cnn)
         spec_cnn = BatchNormalization()(spec_cnn)
         spec_cnn = Activation('relu')(spec_cnn)
         spec_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(spec_cnn)
         spec_cnn = Dropout(dropout_rate)(spec_cnn)
-
     """
     # ASPP module
     atrous_rates = (6, 12, 18)
@@ -171,7 +232,6 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     # concatenate ASPP branches & project
     spec_cnn = Concatenate()([b4, b0, b1, b2, b3])
     """
-    
     spec_cnn = Permute((2, 1, 3))(spec_cnn)
     # RNN
     spec_rnn = Reshape((data_out[0][-2], -1))(spec_cnn)
@@ -181,28 +241,31 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
                 return_sequences=True),
             merge_mode='mul'
         )(spec_rnn)
+                    
             
-        
-    # SAD branch
+    # DOA branch
+#    spec_cnn = Multiply(name="sed_sad_masked")([doa_cnn, sad])
     for i, convCnt in enumerate(f_pool_size):
-        sad_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(sad_cnn)
-        sad_cnn = BatchNormalization()(sad_cnn)
-        sad_cnn = Activation('relu')(sad_cnn)
-        sad_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(sad_cnn)
-        sad_cnn = Dropout(dropout_rate)(sad_cnn)
-    
-    sad_cnn = Permute((2, 1, 3))(sad_cnn)
+        if i == 1:
+            doa_cnn = Multiply()([doa_cnn, src])
+            #doa_cnn = Concatenate(axis=-1)([doa_cnn, src])
+        doa_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(doa_cnn)
+        doa_cnn = BatchNormalization()(doa_cnn)
+        doa_cnn = Activation('relu')(doa_cnn)
+        doa_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(doa_cnn)
+        doa_cnn = Dropout(dropout_rate)(doa_cnn)
+        
+    doa_cnn = Permute((2, 1, 3))(doa_cnn)
     # RNN
-    sad_rnn = Reshape((data_out[0][-2], -1))(sad_cnn)
+    doa_rnn = Reshape((data_out[0][-2], -1))(doa_cnn)
     for nb_rnn_filt in rnn_size:
-        sad_rnn = Bidirectional(
+        doa_rnn = Bidirectional(
             GRU(nb_rnn_filt, activation='tanh', dropout=dropout_rate, recurrent_dropout=dropout_rate,
                 return_sequences=True),
             merge_mode='mul'
-        )(sad_rnn)
-            
-            
-    """
+        )(doa_rnn)
+       
+    """    
     # SED only branch
     for i, convCnt in enumerate(f_pool_size):
         sed_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(sed_cnn)
@@ -220,47 +283,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
                 return_sequences=True),
             merge_mode='mul'
         )(sed_rnn)
-    """     
-    
-    
-    # SRC branch
-    for i, convCnt in enumerate(f_pool_size):
-        src_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(src_cnn)
-        src_cnn = BatchNormalization()(src_cnn)
-        src_cnn = Activation('relu')(src_cnn)
-        src_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(src_cnn)
-        src_cnn = Dropout(dropout_rate)(src_cnn)
-        
-    src_cnn = Permute((2, 1, 3))(src_cnn)
-    # RNN
-    src_rnn = Reshape((data_out[0][-2], -1))(src_cnn)
-    for nb_rnn_filt in rnn_size:
-        src_rnn = Bidirectional(
-            GRU(nb_rnn_filt, activation='tanh', dropout=dropout_rate, recurrent_dropout=dropout_rate,
-                return_sequences=True),
-            merge_mode='mul'
-        )(src_rnn)
-            
-            
-    # DOA branch
-    for i, convCnt in enumerate(f_pool_size):
-        doa_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(doa_cnn)
-        doa_cnn = BatchNormalization()(doa_cnn)
-        doa_cnn = Activation('relu')(doa_cnn)
-        doa_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(doa_cnn)
-        doa_cnn = Dropout(dropout_rate)(doa_cnn)
-        
-    doa_cnn = Permute((2, 1, 3))(doa_cnn)
-    # RNN
-    doa_rnn = Reshape((data_out[0][-2], -1))(doa_cnn)
-    for nb_rnn_filt in rnn_size:
-        doa_rnn = Bidirectional(
-            GRU(nb_rnn_filt, activation='tanh', dropout=dropout_rate, recurrent_dropout=dropout_rate,
-                return_sequences=True),
-            merge_mode='mul'
-        )(doa_rnn)            
-       
-    """    
+   
     # DOA only branch
     for i, convCnt in enumerate(f_pool_size):
         doa_only_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(doa_only_cnn)
@@ -278,28 +301,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
                 return_sequences=True),
             merge_mode='mul'
         )(doa_only_rnn)            
-    """
-    
-    
-    # FC - SRC
-    src = src_rnn
-    for nb_fnn_filt in fnn_size:
-        src = TimeDistributed(Dense(nb_fnn_filt))(src)
-        src = Dropout(dropout_rate)(src)
-    src = TimeDistributed(Dense(data_out[2][-1]))(src)
-    src = Activation('softmax', name='src_out')(src)
 
-    # FC - SAD
-    sad = sad_rnn
-    print(sad)
-    for nb_fnn_filt in fnn_size:
-        sad = TimeDistributed(Dense(nb_fnn_filt))(sad)
-        sad = Dropout(dropout_rate)(sad)
-    sad = Flatten()(sad)
-    sad = Dense(data_out[3][-1])(sad)
-    sad = Activation('sigmoid', name='sad_out')(sad)    
-
-    """    
     # FC - SED only
     sed_only = sed_rnn
     for nb_fnn_filt in fnn_size:
@@ -307,9 +309,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         sed_only = Dropout(dropout_rate)(sed_only)
     sed_only = TimeDistributed(Dense(data_out[4][-1]))(sed_only)
     sed_only = Activation('sigmoid', name='sed_only_out')(sed_only)
-    """
-    
-    """
+
     # FC - DOA only
     doa_only = doa_only_rnn
     for nb_fnn_filt in fnn_size:
@@ -317,8 +317,8 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         doa_only = Dropout(dropout_rate)(doa_only)
     doa_only = TimeDistributed(Dense(data_out[5][-1]))(doa_only)
     doa_only = Activation('tanh', name='doa_only_out')(doa_only)
-    """
-    
+    """    
+   
 
     # FC - SED
     sed = spec_rnn
@@ -327,10 +327,10 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         sed = Dropout(dropout_rate)(sed)
 #    sed = Concatenate(axis=-1, name='spec_concat')([sed, src])
     sed = TimeDistributed(Dense(data_out[0][-1]))(sed)
+    sed = Multiply(name="sed_x_sad")([sed, sad])
+#    sed = Multiply(name="sed_src_masked")([sed, src])
+    sed = TimeDistributed(Dense(data_out[0][-1]))(sed)
     sed = Activation('sigmoid', name='sed_out')(sed)
-    sed = Multiply(name="sad_masked")([sed, sad])
-    sed = Multiply(name="src_masked")([sed, src])
-    
     
     # FC - DOA
     doa = doa_rnn
@@ -339,12 +339,14 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         doa = Dropout(dropout_rate)(doa)
     #doa = Concatenate(axis=-1, name='doa_src_concat')([doa, src])
     doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
-    sad_mask = Concatenate(axis=-1)([sad, sad, sad])    
-    doa = Multiply(name="doa_sad_masked")([doa, sad_mask])
-    doa = Multiply(name="doa_src_masked")([doa, src])
-    doa = Activation('tanh', name='doa_out')(doa)
+    doa = Multiply(name="doa_x_sad")([doa, Concatenate(axis=-1)([sad, sad, sad])])
+#    doa = Multiply(name="doa_x_src")([doa, src])
+    doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
+
     sed_mask = Concatenate(axis=-1)([sed, sed, sed])    
-    doa = Multiply(name="sed_masked")([doa, sed_mask])    
+    doa = Multiply(name="doa_x_sed")([doa, sed_mask])
+    doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
+    doa = Activation('tanh', name='doa_out')(doa)
 
     model = None
     if doa_objective is 'mse':
