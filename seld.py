@@ -197,7 +197,7 @@ def main(argv):
                 verbose=2,
             )
             tr_loss[epoch_cnt] = hist.history.get('loss')[-1]
-            src_masked_loss[epoch_cnt] = hist.history.get('src_masked_loss')[-1]
+            src_masked_loss[epoch_cnt] = hist.history.get('sed_out_loss')[-1]
             doa_concat_loss[epoch_cnt] = hist.history.get('doa_concat_loss')[-1]
             src_out_loss[epoch_cnt] = hist.history.get('src_out_loss')[-1]
             sad_out_loss[epoch_cnt] = hist.history.get('sad_out_loss')[-1]
@@ -378,8 +378,8 @@ def main(argv):
             shutil.copy("keras_model.py", results_dir)
             shutil.copy("parameter.py", results_dir)
             shutil.copy("plot_model.png", results_dir)
-            shutil.copytree("models/", results_dir)
-            shutil.copytree("results/", results_dir)
+            shutil.copytree("models", results_dir+"models/")
+            shutil.copytree("results", results_dir+"results/")
             
             shutil.rmtree("models")
             os.mkdir("./models")

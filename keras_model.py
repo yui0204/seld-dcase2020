@@ -327,6 +327,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         sed = Dropout(dropout_rate)(sed)
 #    sed = Concatenate(axis=-1, name='spec_concat')([sed, src])
     sed = TimeDistributed(Dense(data_out[0][-1]))(sed)
+    sed = Activation('sigmoid')(sed)
     sed = Multiply(name="sed_x_sad")([sed, sad])
 #    sed = Multiply(name="sed_src_masked")([sed, src])
     sed = TimeDistributed(Dense(data_out[0][-1]))(sed)
@@ -342,7 +343,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     doa = Multiply(name="doa_x_sad")([doa, Concatenate(axis=-1)([sad, sad, sad])])
 #    doa = Multiply(name="doa_x_src")([doa, src])
     doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
-
+    doa = Activation('tanh')(doa)
     sed_mask = Concatenate(axis=-1)([sed, sed, sed])    
     doa = Multiply(name="doa_x_sed")([doa, sed_mask])
     doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
