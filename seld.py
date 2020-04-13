@@ -19,6 +19,7 @@ from IPython import embed
 
 
 import matplotlib.pyplot as plt
+import shutil, datetime
 
 
 def collect_test_labels(_data_gen_test, _data_out, _nb_classes, quick_test):
@@ -344,6 +345,37 @@ def main(argv):
             print('\tLocalization-only scores: DOA Error: {:0.1f}, Frame recall: {:0.1f}'.format(test_doa_loss[0], test_doa_loss[1]*100))
             print('\tDetection-only scores:Error rate: {:0.2f}, F-score: {:0.1f}'.format(test_sed_loss[0], test_sed_loss[1]*100))
 
+
+            text = 'Results on test split:'
+            text += '\tClass-aware localization scores: DOA Error: {:0.1f}, F-score: {:0.1f}'.format(test_new_metric[2], test_new_metric[3]*100)
+            text += '\tLocation-aware detection scores: Error rate: {:0.2f}, F-score: {:0.1f}'.format(test_new_metric[0], test_new_metric[1]*100)
+            text += '\tSELD (early stopping metric): {:0.2f}'.format(test_new_seld_metric)
+            text += '\n\tDCASE2019 Scores'
+            text += '\tLocalization-only scores: DOA Error: {:0.1f}, Frame recall: {:0.1f}'.format(test_doa_loss[0], test_doa_loss[1]*100)
+            text += '\tDetection-only scores:Error rate: {:0.2f}, F-score: {:0.1f}'.format(test_sed_loss[0], test_sed_loss[1]*100)
+            text += '\tDCASE2020 Scores'
+
+            
+            date = datetime.datetime.today().strftime("%Y_%m%d_%H%M")            
+            filename = "metrics_of_"
+            filename += ".txt"
+            results_dir = "./metric_results/"+date+"/"
+
+            if not os.path.exists(results_dir):
+                os.makedirs(results_dir)
+
+            with open(results_dir + "metrics.txt","w") as f:
+                f.write(str(text))                                
+            shutil.copy("keras_model.py", results_dir)
+            shutil.copy("parameter.py", results_dir)
+            shutil.copy("plot_model.png", results_dir)
+            shutil.copytree("models/", results_dir)
+            shutil.copytree("results/", results_dir)
+            
+            shutil.rmtree("models")
+            os.mkdir("./models")
+            shutil.rmtree("results")
+            os.mkdir("./results")
 
 if __name__ == "__main__":
     try:

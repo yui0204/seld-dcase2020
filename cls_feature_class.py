@@ -412,7 +412,7 @@ class FeatureClass:
             if frame_cnt not in out_dict:
                 out_dict[frame_cnt] = []
                 for tmp_val in in_dict[frame_cnt]:
-
+                    #print(tmp_val[0], tmp_val[1], tmp_val[2])
                     ele_rad = tmp_val[2]*np.pi/180.
                     azi_rad = tmp_val[1]*np.pi/180
 

@@ -25,6 +25,8 @@ from keras.layers import AveragePooling2D
 from keras.layers import DepthwiseConv2D
 from keras.layers import ZeroPadding2D, Flatten, Multiply
 
+from keras.layers.core import Lambda
+
 class BilinearUpsampling(Layer):
     """Just a simple bilinear upsampling layer. Works only with TF.
        Args:
@@ -129,6 +131,11 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     doa_only_cnn = spec_start
     src_cnn = spec_start
     sed_cnn = spec_start
+    
+#    spec_cnn = Lambda(lambda y: y[:,:4,:,:])(spec_cnn)
+#    sad_cnn = Lambda(lambda y: y[:,:4,:,:])(sad_cnn)
+#    src_cnn = Lambda(lambda y: y[:,4:,:,:])(src_cnn)
+
     # SED branch
     for i, convCnt in enumerate(f_pool_size):
         spec_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(spec_cnn)
@@ -195,8 +202,8 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         )(sad_rnn)
             
             
-
-    # SED branch
+    """
+    # SED only branch
     for i, convCnt in enumerate(f_pool_size):
         sed_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(sed_cnn)
         sed_cnn = BatchNormalization()(sed_cnn)
@@ -213,7 +220,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
                 return_sequences=True),
             merge_mode='mul'
         )(sed_rnn)
-            
+    """     
     
     
     # SRC branch
