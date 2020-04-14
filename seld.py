@@ -356,13 +356,16 @@ def main(argv):
 
 
             text = 'Results on test split:'
-            text += '\tClass-aware localization scores: DOA Error: {:0.1f}, F-score: {:0.1f}'.format(test_new_metric[2], test_new_metric[3]*100)
-            text += '\tLocation-aware detection scores: Error rate: {:0.2f}, F-score: {:0.1f}'.format(test_new_metric[0], test_new_metric[1]*100)
-            text += '\tSELD (early stopping metric): {:0.2f}'.format(test_new_seld_metric)
-            text += '\n\tDCASE2019 Scores'
-            text += '\tLocalization-only scores: DOA Error: {:0.1f}, Frame recall: {:0.1f}'.format(test_doa_loss[0], test_doa_loss[1]*100)
-            text += '\tDetection-only scores:Error rate: {:0.2f}, F-score: {:0.1f}'.format(test_sed_loss[0], test_sed_loss[1]*100)
-            text += '\tDCASE2020 Scores'
+            
+            text += '\nDCASE2020 Scores'
+            text += '\nClass-aware localization scores: DOA Error: {:0.1f}, F-score: {:0.1f}'.format(test_new_metric[2], test_new_metric[3]*100)
+            text += '\nLocation-aware detection scores: Error rate: {:0.2f}, F-score: {:0.1f}'.format(test_new_metric[0], test_new_metric[1]*100)
+            text += '\nSELD (early stopping metric): {:0.2f}'.format(test_new_seld_metric)
+            
+            text += '\n\nDCASE2019 Scores'
+            text += '\nLocalization-only scores: DOA Error: {:0.1f}, Frame recall: {:0.1f}'.format(test_doa_loss[0], test_doa_loss[1]*100)
+            text += '\nDetection-only scores:Error rate: {:0.2f}, F-score: {:0.1f}'.format(test_sed_loss[0], test_sed_loss[1]*100)
+
 
             
             date = datetime.datetime.today().strftime("%Y_%m%d_%H%M")            

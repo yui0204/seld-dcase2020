@@ -197,8 +197,8 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     # SED branch
 #    spec_cnn = Multiply(name="sed_sad_masked")([spec_cnn, sad])
     for i, convCnt in enumerate(f_pool_size):
-        if i == 1:
-            spec_cnn = Multiply()([spec_cnn, src])
+#        if i == 1:
+#            spec_cnn = Multiply()([spec_cnn, src])
 #            spec_cnn = Concatenate(axis=-1)([spec_cnn, src])
         spec_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(spec_cnn)
         spec_cnn = BatchNormalization()(spec_cnn)
@@ -246,8 +246,8 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     # DOA branch
 #    spec_cnn = Multiply(name="sed_sad_masked")([doa_cnn, sad])
     for i, convCnt in enumerate(f_pool_size):
-        if i == 1:
-            doa_cnn = Multiply()([doa_cnn, src])
+#        if i == 1:
+#            doa_cnn = Multiply()([doa_cnn, src])
             #doa_cnn = Concatenate(axis=-1)([doa_cnn, src])
         doa_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(doa_cnn)
         doa_cnn = BatchNormalization()(doa_cnn)
@@ -326,9 +326,9 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         sed = TimeDistributed(Dense(nb_fnn_filt))(sed)
         sed = Dropout(dropout_rate)(sed)
 #    sed = Concatenate(axis=-1, name='spec_concat')([sed, src])
-    sed = TimeDistributed(Dense(data_out[0][-1]))(sed)
-    sed = Activation('sigmoid')(sed)
-    sed = Multiply(name="sed_x_sad")([sed, sad])
+#    sed = TimeDistributed(Dense(data_out[0][-1]))(sed)
+#    sed = Activation('sigmoid')(sed)
+#    sed = Multiply(name="sed_x_sad")([sed, sad])
 #    sed = Multiply(name="sed_src_masked")([sed, src])
     sed = TimeDistributed(Dense(data_out[0][-1]))(sed)
     sed = Activation('sigmoid', name='sed_out')(sed)
@@ -339,13 +339,13 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         doa = TimeDistributed(Dense(nb_fnn_filt))(doa)
         doa = Dropout(dropout_rate)(doa)
     #doa = Concatenate(axis=-1, name='doa_src_concat')([doa, src])
-    doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
-    doa = Multiply(name="doa_x_sad")([doa, Concatenate(axis=-1)([sad, sad, sad])])
+#    doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
+#    doa = Multiply(name="doa_x_sad")([doa, Concatenate(axis=-1)([sad, sad, sad])])
 #    doa = Multiply(name="doa_x_src")([doa, src])
-    doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
-    doa = Activation('tanh')(doa)
-    sed_mask = Concatenate(axis=-1)([sed, sed, sed])    
-    doa = Multiply(name="doa_x_sed")([doa, sed_mask])
+#    doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
+#    doa = Activation('tanh')(doa)
+#    sed_mask = Concatenate(axis=-1)([sed, sed, sed])    
+#    doa = Multiply(name="doa_x_sed")([doa, sed_mask])
     doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
     doa = Activation('tanh', name='doa_out')(doa)
 
