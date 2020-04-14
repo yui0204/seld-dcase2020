@@ -21,6 +21,14 @@ from IPython import embed
 import matplotlib.pyplot as plt
 import shutil, datetime
 
+import keras.backend as K
+import tensorflow as tf
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+config.gpu_options.visible_device_list = "0"
+sess = tf.Session(config=config)
+K.set_session(sess)
+
 
 def collect_test_labels(_data_gen_test, _data_out, _nb_classes, quick_test):
     # Collecting ground truth for test data
