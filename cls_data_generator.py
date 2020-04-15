@@ -197,7 +197,7 @@ class DataGenerator(object):
                     # Split to sequences
                     feat = self._split_in_seqs(feat, self._feature_seq_len)
                     feat = np.transpose(feat, (0, 3, 1, 2))
-                    label = self._split_in_seqs(label, self._label_seq_len)
+                    label = self._split_in_seqs(label, self._label_seq_len)   
                     label = [
                         label[:, :, :self._nb_classes],                                # SED labels
                         label[:, :, :],                                                         # SED + DOA labels
@@ -205,7 +205,7 @@ class DataGenerator(object):
                         (label[:, :, :self._nb_classes].sum(2)[:,:,np.newaxis]>0)*1, # Number of sources
                         label[:, :, :self._nb_classes].max(1)#,
 #                        label[:, :, :self._nb_classes],
-#                        label[:, :, self._nb_classes:]                                                         # SED + DOA labels
+#                        label[:, :, self._nb_classes:]                         # SED + DOA labels
                         ]
                     yield feat, label
 

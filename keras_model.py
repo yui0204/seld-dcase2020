@@ -38,8 +38,8 @@ class BilinearUpsampling(Layer):
 
         super(BilinearUpsampling, self).__init__(**kwargs)
 
-        self.data_format = conv_utils.normalize_data_format(data_format)
-#        self.data_format = K.normalize_data_format(data_format)
+#        self.data_format = conv_utils.normalize_data_format(data_format)
+        self.data_format = K.normalize_data_format(data_format)
         self.input_spec = InputSpec(ndim=4)
         if output_size:
             self.output_size = conv_utils.normalize_tuple(
@@ -194,15 +194,12 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
 
     # SED branch
     for i, convCnt in enumerate(f_pool_size):
-#        if i == 1:
-#            spec_cnn = Multiply()([spec_cnn, src])
-#            spec_cnn = Concatenate(axis=-1)([spec_cnn, src])
         spec_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(spec_cnn)
         spec_cnn = BatchNormalization()(spec_cnn)
         spec_cnn = Activation('relu')(spec_cnn)
         spec_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(spec_cnn)
         spec_cnn = Dropout(dropout_rate)(spec_cnn)
-    """
+    
     # ASPP module
     atrous_rates = (6, 12, 18)
     b0 = Conv2D(64, (1, 1), padding='same', use_bias=False, name='aspp0')(spec_cnn)
@@ -228,7 +225,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
 
     # concatenate ASPP branches & project
     spec_cnn = Concatenate()([b4, b0, b1, b2, b3])
-    """
+    
     spec_cnn = Permute((2, 1, 3))(spec_cnn)
     # RNN
     spec_rnn = Reshape((data_out[0][-2], -1))(spec_cnn)
@@ -242,9 +239,6 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
             
     # DOA branch
     for i, convCnt in enumerate(f_pool_size):
-#        if i == 1:
-#            doa_cnn = Multiply()([doa_cnn, src])
-            #doa_cnn = Concatenate(axis=-1)([doa_cnn, src])
         doa_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(doa_cnn)
         doa_cnn = BatchNormalization()(doa_cnn)
         doa_cnn = Activation('relu')(doa_cnn)
@@ -263,23 +257,23 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
    
 
     # FC - SED
-    sed = sad_rnn
+    sed = spec_rnn
     for nb_fnn_filt in fnn_size:
         sed = TimeDistributed(Dense(nb_fnn_filt))(sed)
         sed = Dropout(dropout_rate)(sed)
     sed = TimeDistributed(Dense(data_out[0][-1]))(sed)
-    sed = Activation('sigmoid', name='sed')(sed)
-    sed = Multiply(name="sed_x_sad")([sed, sad])
-    sed = Multiply(name="sed_out")([sed, src])
+    sed = Activation('sigmoid', name='sed_out')(sed)
+#    sed = Multiply(name="sed_x_sad")([sed, sad])
+#    sed = Multiply(name="sed_out")([sed, src])
     
     # FC - DOA
-    doa = src_rnn
+    doa = doa_rnn
     for nb_fnn_filt in fnn_size:
         doa = TimeDistributed(Dense(nb_fnn_filt))(doa)
         doa = Dropout(dropout_rate)(doa)
     doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
     doa = Activation('tanh', name='doa_out')(doa)
-    doa = Multiply(name="doa_x_src")([doa, src])
+#    doa = Multiply(name="doa_x_src")([doa, src])
     doa = Multiply(name="doa_x_sed")([doa, Concatenate(axis=-1)([sed, sed, sed])])
 
     model = None
@@ -312,7 +306,7 @@ def load_seld_model(model_file, doa_objective):
     if doa_objective is 'mse':
         return load_model(model_file)
     elif doa_objective is 'masked_mse':
-        return load_model(model_file, custom_objects={'masked_mse': masked_mse})
+        return load_model(model_file, custom_objects={'masked_mse': masked_mse, 'BilinearUpsampling': BilinearUpsampling})
     else:
         print('ERROR: Unknown doa objective: {}'.format(doa_objective))
         exit()
