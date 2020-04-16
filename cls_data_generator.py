@@ -77,10 +77,10 @@ class DataGenerator(object):
             label_shape = None
         else:
             label_shape = [
-                (self._batch_size, self._label_seq_len, self._nb_classes), # SED
+                (self._batch_size, self._label_seq_len, self._nb_classes),   # SED
                 (self._batch_size, self._label_seq_len, self._nb_classes*3), # DOA
-                (self._batch_size, self._label_seq_len, 1), # SRC
-                (self._batch_size, 14)#, # SAD
+                (self._batch_size, self._label_seq_len, 3),                  # SRC
+                (self._batch_size, 14)#,                                     # SAD
 #                (self._batch_size, self._label_seq_len, self._nb_classes), # SED_only
 #                (self._batch_size, self._label_seq_len, self._nb_classes*3) # DOA only
             ]
@@ -200,10 +200,10 @@ class DataGenerator(object):
                     label = self._split_in_seqs(label, self._label_seq_len)   
                     label = [
                         label[:, :, :self._nb_classes],                                # SED labels
-                        label[:, :, :],                                                         # SED + DOA labels
-                        #np_utils.to_categorical(label[:, :, :self._nb_classes].sum(2), num_classes=3), # Number of sources
-                        (label[:, :, :self._nb_classes].sum(2)[:,:,np.newaxis]>0)*1, # Number of sources
-                        label[:, :, :self._nb_classes].max(1)#,
+                        label[:, :, :],                                                # SED + DOA labels
+                        np_utils.to_categorical(label[:, :, :self._nb_classes].sum(2), num_classes=3), # Number of sources
+                        #(label[:, :, :self._nb_classes].sum(2)[:,:,np.newaxis]>0)*1,  # Active sound source
+                        label[:, :, :self._nb_classes].max(1)#,                        # SAD
 #                        label[:, :, :self._nb_classes],
 #                        label[:, :, self._nb_classes:]                         # SED + DOA labels
                         ]

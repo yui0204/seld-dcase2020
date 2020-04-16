@@ -2,7 +2,7 @@
 # The SELDnet architecture
 #
 
-from keras.layers import Bidirectional, Conv2D, MaxPooling2D, Input, Concatenate
+from keras.layers import Bidirectional, Conv2D, MaxPooling2D, Input, Concatenate, GlobalAveragePooling1D, GlobalMaxPooling1D
 from keras.layers.core import Dense, Activation, Dropout, Reshape, Permute
 from keras.layers.recurrent import GRU
 from keras.layers.normalization import BatchNormalization
@@ -130,9 +130,8 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     doa_cnn = spec_start
     src_cnn = spec_start
     
-#    spec_cnn = Lambda(lambda y: y[:,:4,:,:])(spec_cnn)
-#    sad_cnn = Lambda(lambda y: y[:,:4,:,:])(sad_cnn)
-#    src_cnn = Lambda(lambda y: y[:,4:,:,:])(src_cnn)
+    spec_cnn = Lambda(lambda y: y[:,:4,:,:])(spec_cnn)
+    sad_cnn = Lambda(lambda y: y[:,:4,:,:])(sad_cnn)
 
     # SAD branch
     for i, convCnt in enumerate(f_pool_size):
@@ -177,15 +176,19 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     for nb_fnn_filt in fnn_size:
         src = TimeDistributed(Dense(nb_fnn_filt))(src)
         src = Dropout(dropout_rate)(src)
+    src1 = src
     src = TimeDistributed(Dense(data_out[2][-1]))(src)
-    src = Activation('sigmoid', name='src_out')(src)
+    src = Activation('softmax', name='src_out')(src)
 
     # FC - SAD
     sad = sad_rnn
     for nb_fnn_filt in fnn_size:
         sad = TimeDistributed(Dense(nb_fnn_filt))(sad)
         sad = Dropout(dropout_rate)(sad)
-    sad = Flatten()(sad)
+    sad1 = sad
+    sad = GlobalAveragePooling1D()(sad)
+    #sad = GlobalMaxPooling1D()(sad)
+    #sad = Flatten()(sad)
     sad = Dense(data_out[3][-1])(sad)
     sad = Activation('sigmoid', name='sad_out')(sad)    
     
@@ -199,7 +202,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         spec_cnn = Activation('relu')(spec_cnn)
         spec_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(spec_cnn)
         spec_cnn = Dropout(dropout_rate)(spec_cnn)
-    
+    """
     # ASPP module
     atrous_rates = (6, 12, 18)
     b0 = Conv2D(64, (1, 1), padding='same', use_bias=False, name='aspp0')(spec_cnn)
@@ -225,7 +228,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
 
     # concatenate ASPP branches & project
     spec_cnn = Concatenate()([b4, b0, b1, b2, b3])
-    
+    """
     spec_cnn = Permute((2, 1, 3))(spec_cnn)
     # RNN
     spec_rnn = Reshape((data_out[0][-2], -1))(spec_cnn)
@@ -261,10 +264,14 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     for nb_fnn_filt in fnn_size:
         sed = TimeDistributed(Dense(nb_fnn_filt))(sed)
         sed = Dropout(dropout_rate)(sed)
+    sed = Concatenate(axis=2)([sed, src1, sad1])
     sed = TimeDistributed(Dense(data_out[0][-1]))(sed)
     sed = Activation('sigmoid', name='sed_out')(sed)
 #    sed = Multiply(name="sed_x_sad")([sed, sad])
 #    sed = Multiply(name="sed_out")([sed, src])
+    
+    noas = keras.backend.sum(sed, axis=2, keepdims=True) # noas
+    
     
     # FC - DOA
     doa = doa_rnn
