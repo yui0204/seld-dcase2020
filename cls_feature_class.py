@@ -288,10 +288,20 @@ class FeatureClass:
                 continue
             wav_filename = '{}.wav'.format(file_name.split('.')[0])
             desc_file_polar = self.load_output_format_file(os.path.join(self._desc_dir, file_name))
+            
+            """
+            for i in enumerate(desc_file_polar):
+                desc_file_polar[i[1]][0][0] = 0
+                if len(desc_file_polar[i[1]]) == 2:
+                    desc_file_polar[i[1]][1][0] = 1
+            """
+                
             desc_file = self.convert_output_format_polar_to_cartesian_(desc_file_polar)
             label_mat = self.get_labels_for_file(desc_file)
+#            label_mat = label_mat[:,14:].reshape(-1,3,14)[:,:,:2].reshape(-1,6)
             print('{}: {}, {}'.format(file_cnt, file_name, label_mat.shape))
             np.save(os.path.join(self._label_dir, '{}.npy'.format(wav_filename.split('.')[0])), label_mat)
+            #np.save(os.path.join(self._label_dir, '{}_DOA.npy'.format(wav_filename.split('.')[0])), label_mat)
 
     # -------------------------------  DCASE OUTPUT  FORMAT FUNCTIONS -------------------------------
     def load_output_format_file(self, _output_format_file):

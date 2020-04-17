@@ -80,9 +80,8 @@ class DataGenerator(object):
                 (self._batch_size, self._label_seq_len, self._nb_classes),   # SED
                 (self._batch_size, self._label_seq_len, self._nb_classes*3), # DOA
                 (self._batch_size, self._label_seq_len, 3),                  # SRC
-                (self._batch_size, 14)#,                                     # SAD
-#                (self._batch_size, self._label_seq_len, self._nb_classes), # SED_only
-#                (self._batch_size, self._label_seq_len, self._nb_classes*3) # DOA only
+                (self._batch_size, 14),                                     # SAD
+                (self._batch_size, self._label_seq_len, 6)                   # DOA only 
             ]
         return feat_shape, label_shape
 
@@ -164,6 +163,7 @@ class DataGenerator(object):
                     while len(self._circ_buf_feat) < self._feature_batch_seq_len:
                         temp_feat = np.load(os.path.join(self._feat_dir, self._filenames_list[file_cnt]))
                         temp_label = np.load(os.path.join(self._label_dir, self._filenames_list[file_cnt]))
+                        #temp_doa = np.load(os.path.join(self._label_dir, self._filenames_list[file_cnt])[:-4] + "_DOA.npy")
 
                         for f_row in temp_feat:
                             self._circ_buf_feat.append(f_row)
@@ -198,14 +198,26 @@ class DataGenerator(object):
                     feat = self._split_in_seqs(feat, self._feature_seq_len)
                     feat = np.transpose(feat, (0, 3, 1, 2))
                     label = self._split_in_seqs(label, self._label_seq_len)   
+                    doa = np.zeros((len(label), 60, 2, 3))
+                    for n in range(len(label)):
+                        for t in range(len(label[0])):
+                            s = label[n][t][14:].reshape(3,14).sum(0)
+                            src = 0
+                            for cls in range(14):
+                                if src == 0 and not s[cls] == 0:
+                                    doa[n][t][0][:] = label[n][t][14:].reshape(3,14).T[cls]
+                                    src += 1
+                                elif src == 1 and not s[cls] == 0:
+                                    doa[n][t][1][:] = label[n][t][14:].reshape(3,14).T[cls]
+                                    src += 1
+                    doa = doa.transpose(0,1,3,2).reshape(len(label), 60, 6)                
                     label = [
                         label[:, :, :self._nb_classes],                                # SED labels
                         label[:, :, :],                                                # SED + DOA labels
                         np_utils.to_categorical(label[:, :, :self._nb_classes].sum(2), num_classes=3), # Number of sources
                         #(label[:, :, :self._nb_classes].sum(2)[:,:,np.newaxis]>0)*1,  # Active sound source
-                        label[:, :, :self._nb_classes].max(1)#,                        # SAD
-#                        label[:, :, :self._nb_classes],
-#                        label[:, :, self._nb_classes:]                         # SED + DOA labels
+                        label[:, :, :self._nb_classes].max(1),                         # SAD
+                        doa                                                            # DOA labels
                         ]
                     yield feat, label
 
