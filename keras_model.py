@@ -296,9 +296,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     sed = Activation('sigmoid', name='sed_out')(sed)
 #    sed = Multiply(name="sed_x_sad")([sed, sad])
 #    sed = Multiply(name="sed_out")([sed, src])
-    
-    noas = keras.backend.sum(sed, axis=2, keepdims=True) # noas
-    
+        
     
     # FC - DOA
     doa = doa_rnn
@@ -318,7 +316,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     elif doa_objective is 'masked_mse':
         doa_concat = Concatenate(axis=-1, name='doa_concat')([sed, doa])
         model = Model(inputs=spec_start, outputs=[sed, doa_concat, src, sad, doa_only])
-        model.compile(optimizer=Adam(), loss=['binary_crossentropy', masked_mse, 'binary_crossentropy', 'binary_crossentropy', 'mean_squared_error'], loss_weights=weights, metrics=['accuracy'])
+        model.compile(optimizer=Adam(), loss=['binary_crossentropy', masked_mse, 'binary_crossentropy', 'binary_crossentropy', pit_mse], loss_weights=weights, metrics=['accuracy'])
     else:
         print('ERROR: Unknown doa_objective: {}'.format(doa_objective))
         exit()
@@ -337,11 +335,29 @@ def masked_mse(y_gt, model_out):
     return keras.backend.sqrt(keras.backend.sum(keras.backend.square(y_gt[:, :, 14:] - model_out[:, :, 14:]) * sed_out))/keras.backend.sum(sed_out)
 
 
+def pit_mse(y_gt, model_out):
+    y_gt = Reshape((-1, 60, 3, 2))(y_gt)
+    model_out = Reshape((-1, 60, 3, 2))(model_out)
+    
+    loss1 = K.mean(keras.backend.square(y_gt[:, :, :, :] - model_out[:, :, :, :]))
+
+    loss2 = K.mean(keras.backend.square(y_gt[:, :, :, 0] - model_out[:, :, :, 1]))
+    loss2 += K.mean(keras.backend.square(y_gt[:, :, :, 1] - model_out[:, :, :, 0]))
+    
+    if keras.backend.less(loss1, loss2) == True:
+        loss = loss1
+    else:
+        loss = loss2
+    
+    # Use the mask to computed mse now. Normalize with the mask weights #TODO fix this hardcoded value of number of classes
+    return loss
+
+
 def load_seld_model(model_file, doa_objective):
     if doa_objective is 'mse':
         return load_model(model_file)
     elif doa_objective is 'masked_mse':
-        return load_model(model_file, custom_objects={'masked_mse': masked_mse, 'BilinearUpsampling': BilinearUpsampling})
+        return load_model(model_file, custom_objects={'masked_mse': masked_mse, 'pit_mse': pit_mse, 'BilinearUpsampling': BilinearUpsampling})
     else:
         print('ERROR: Unknown doa objective: {}'.format(doa_objective))
         exit()
