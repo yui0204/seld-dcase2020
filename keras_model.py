@@ -305,6 +305,7 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     for nb_fnn_filt in fnn_size:
         doa = TimeDistributed(Dense(nb_fnn_filt))(doa)
         doa = Dropout(dropout_rate)(doa)
+    doa = Concatenate(axis=2)([doa, doa_only1])
     doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
     doa = Activation('tanh', name='doa_out')(doa)
 #    doa = Multiply(name="doa_x_src")([doa, src])
