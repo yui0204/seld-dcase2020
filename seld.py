@@ -207,8 +207,8 @@ def main(argv):
             tr_loss[epoch_cnt] = hist.history.get('loss')[-1]
             src_masked_loss[epoch_cnt] = hist.history.get('sed_out_loss')[-1]
             doa_concat_loss[epoch_cnt] = hist.history.get('doa_concat_loss')[-1]
-            src_out_loss[epoch_cnt] = hist.history.get('src_out_loss')[-1]
-            sad_out_loss[epoch_cnt] = hist.history.get('sad_out_loss')[-1]
+#            src_out_loss[epoch_cnt] = hist.history.get('src_out_loss')[-1]
+#            sad_out_loss[epoch_cnt] = hist.history.get('sad_out_loss')[-1]
             
 
             # predict once per peoch
@@ -250,6 +250,7 @@ def main(argv):
                 best_seld_metric = new_seld_metric[epoch_cnt]
                 best_epoch = epoch_cnt
                 model.save(model_name)
+                model.save_weights(model_name[:-2] + 'hdf5')
                 patience_cnt = 0
 
             print(
@@ -267,6 +268,8 @@ def main(argv):
             )
             if patience_cnt > params['patience']:
                 break
+        model.save("last_"+model_name)
+        model.save_weights("last_"+model_name[:-2] + 'hdf5')
 
         avg_scores_val.append([new_metric[best_epoch, 0], new_metric[best_epoch, 1], new_metric[best_epoch, 2],
                                new_metric[best_epoch, 3], best_seld_metric])
@@ -399,34 +402,34 @@ def main(argv):
             
     src_masked_loss[epoch_cnt] = hist.history.get('sed_out_loss')[-1]
     doa_concat_loss[epoch_cnt] = hist.history.get('doa_concat_loss')[-1]
-    src_out_loss[epoch_cnt] = hist.history.get('src_out_loss')[-1]
-    sad_out_loss[epoch_cnt] = hist.history.get('sad_out_loss')[-1]
+#    src_out_loss[epoch_cnt] = hist.history.get('src_out_loss')[-1]
+#    sad_out_loss[epoch_cnt] = hist.history.get('sad_out_loss')[-1]
             
     plot.figure()
     nb_epoch = len(tr_loss)
-    plot.subplot(511)
+    plot.subplot(311)
     plot.plot(range(nb_epoch), tr_loss, label='train loss')
     plot.grid(True)
 
-    plot.subplot(512)
+    plot.subplot(312)
     plot.plot(range(nb_epoch), src_masked_loss, label='sed loss')
     plot.legend()
     plot.grid(True)
 
-    plot.subplot(513)
+    plot.subplot(313)
     plot.plot(range(nb_epoch), doa_concat_loss, label='doa loss')
     plot.legend()
     plot.grid(True)
 
-    plot.subplot(514)
-    plot.plot(range(nb_epoch), src_out_loss, label='src loss')
-    plot.legend()
-    plot.grid(True)
+#    plot.subplot(514)
+#    plot.plot(range(nb_epoch), src_out_loss, label='src loss')
+#    plot.legend()
+#    plot.grid(True)
     
-    plot.subplot(515)
-    plot.plot(range(nb_epoch), sad_out_loss, label='sad loss')
-    plot.legend()
-    plot.grid(True)
+#    plot.subplot(515)
+#    plot.plot(range(nb_epoch), sad_out_loss, label='sad loss')
+#    plot.legend()
+#    plot.grid(True)
 
 
     plot.savefig(results_dir+"loss.png")

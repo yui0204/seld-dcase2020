@@ -27,6 +27,8 @@ from keras.layers import ZeroPadding2D, Flatten, Multiply
 
 from keras.layers.core import Lambda
 
+import tensorflow as tf
+
 class BilinearUpsampling(Layer):
     """Just a simple bilinear upsampling layer. Works only with TF.
        Args:
@@ -104,7 +106,7 @@ def SepConv_BN(x, filters, prefix, stride=1, kernel_size=3, rate=1, depth_activa
 
     if not depth_activation:
         x = Activation('relu')(x)
-    x = DepthwiseConv2D((kernel_size, kernel_size), strides=(stride, stride), dilation_rate=(rate, rate),
+    x = DepthwiseConv2D((kernel_size, kernel_size), strides=(stride, stride), dilation_rate=(rate,1),
                         padding=depth_padding, use_bias=False, name=prefix + '_depthwise')(x)
     x = BatchNormalization(name=prefix + '_depthwise_BN', epsilon=epsilon)(x)
     if depth_activation:
@@ -116,6 +118,17 @@ def SepConv_BN(x, filters, prefix, stride=1, kernel_size=3, rate=1, depth_activa
         x = Activation('relu')(x)
 
     return x
+
+
+
+
+def se_block(input, channels, r=8):
+    # Squeeze
+    x = GlobalAveragePooling2D()(input)
+    # Excitation
+    x = Dense(channels//r, activation="relu")(x)
+    x = Dense(channels, activation="sigmoid")(x)
+    return Multiply()([input, x])
 
 
 
@@ -133,17 +146,18 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     
 #    spec_cnn = Lambda(lambda y: y[:,:4,:,:])(spec_cnn)
 #    sad_cnn = Lambda(lambda y: y[:,:4,:,:])(sad_cnn)
-
+    
     # SAD branch
     for i, convCnt in enumerate(f_pool_size):
-        sad_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(sad_cnn)
+        sad_cnn = Conv2D(filters=nb_cnn2d_filt[i], kernel_size=(3, 3), padding='same')(sad_cnn)
         sad_cnn = BatchNormalization()(sad_cnn)
         sad_cnn = Activation('relu')(sad_cnn)
-        sad_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(sad_cnn)
-        sad_cnn = Dropout(dropout_rate)(sad_cnn)
+        sad_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(sad_cnn) 
+        #sad_cnn = Dropout(dropout_rate)(sad_cnn)
     
-    sad_cnn = Permute((2, 1, 3))(sad_cnn)
     # RNN
+    sad_cnn = Permute((2, 1, 3))(sad_cnn)
+    #sad_rnn = Reshape((9, -1))(sad_cnn)
     sad_rnn = Reshape((data_out[0][-2], -1))(sad_cnn)
     for nb_rnn_filt in rnn_size:
         sad_rnn = Bidirectional(
@@ -151,18 +165,18 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
                 return_sequences=True),
             merge_mode='mul'
         )(sad_rnn)
-    
+
     
     # SRC branch
     for i, convCnt in enumerate(f_pool_size):
-        src_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(src_cnn)
+        src_cnn = Conv2D(filters=nb_cnn2d_filt[i], kernel_size=(3, 3), padding='same')(src_cnn)
         src_cnn = BatchNormalization()(src_cnn)
         src_cnn = Activation('relu')(src_cnn)
         src_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(src_cnn)
-        src_cnn = Dropout(dropout_rate)(src_cnn)
+        #src_cnn = Dropout(dropout_rate)(src_cnn)
         
-    src_cnn = Permute((2, 1, 3))(src_cnn)
     # RNN
+    src_cnn = Permute((2, 1, 3))(src_cnn)
     src_rnn = Reshape((data_out[0][-2], -1))(src_cnn)
     for nb_rnn_filt in rnn_size:
         src_rnn = Bidirectional(
@@ -174,14 +188,14 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
             
     # DOA only  branch
     for i, convCnt in enumerate(f_pool_size):
-        doa_only_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(doa_only_cnn)
+        doa_only_cnn = Conv2D(filters=nb_cnn2d_filt[i], kernel_size=(3, 3), padding='same')(doa_only_cnn)
         doa_only_cnn = BatchNormalization()(doa_only_cnn)
         doa_only_cnn = Activation('relu')(doa_only_cnn)
         doa_only_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(doa_only_cnn)
-        doa_only_cnn = Dropout(dropout_rate)(doa_only_cnn)
+        #doa_only_cnn = Dropout(dropout_rate)(doa_only_cnn)
         
-    doa_only_cnn = Permute((2, 1, 3))(doa_only_cnn)
     # RNN
+    doa_only_cnn = Permute((2, 1, 3))(doa_only_cnn)
     doa_only_rnn = Reshape((data_out[0][-2], -1))(doa_only_cnn)
     for nb_rnn_filt in rnn_size:
         doa_only_rnn = Bidirectional(
@@ -190,46 +204,36 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
             merge_mode='mul'
         )(doa_only_rnn)
             
-    # FC - SRC
-    src = src_rnn
-    for nb_fnn_filt in fnn_size:
-        src = TimeDistributed(Dense(nb_fnn_filt))(src)
-        src = Dropout(dropout_rate)(src)
-    src1 = src
-    src = TimeDistributed(Dense(data_out[2][-1]))(src)
-    src = Activation('softmax', name='src_out')(src)
 
-    # FC - SAD
-    sad = sad_rnn
-    for nb_fnn_filt in fnn_size:
-        sad = TimeDistributed(Dense(nb_fnn_filt))(sad)
-        sad = Dropout(dropout_rate)(sad)
-    sad1 = sad
-    sad = GlobalAveragePooling1D()(sad)
-    #sad = GlobalMaxPooling1D()(sad)
-    #sad = Flatten()(sad)
-    sad = Dense(data_out[3][-1])(sad)
-    sad = Activation('sigmoid', name='sad_out')(sad)    
-                            
-    # FC - DOA_only
-    doa_only = doa_only_rnn
-    for nb_fnn_filt in fnn_size:
-        doa_only = TimeDistributed(Dense(nb_fnn_filt))(doa_only)
-        doa_only = Dropout(dropout_rate)(doa_only)
-    doa_only1 = doa_only
-    doa_only = TimeDistributed(Dense(data_out[4][-1]))(doa_only)
-    doa_only = Activation('tanh', name='doa_only_out')(doa_only)
-    
 
 
     # SED branch
     for i, convCnt in enumerate(f_pool_size):
-        spec_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(spec_cnn)
+        spec_cnn = Conv2D(filters=nb_cnn2d_filt[i], kernel_size=(3, 3), padding='same')(spec_cnn)
         spec_cnn = BatchNormalization()(spec_cnn)
         spec_cnn = Activation('relu')(spec_cnn)
         spec_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(spec_cnn)
-        spec_cnn = Dropout(dropout_rate)(spec_cnn)
     """
+        if i == 0:
+            spec_cnn2 = spec_cnn
+        else:
+            spec_cnn2 = Conv2D(filters=nb_cnn2d_filt[i], kernel_size=(3, 3), padding='same')(spec_cnn2)
+            spec_cnn2 = BatchNormalization()(spec_cnn2)
+            spec_cnn2 = Activation('relu')(spec_cnn2)
+            spec_cnn2 = MaxPooling2D(pool_size=(2, f_pool_size[i]))(spec_cnn2)
+            if i == 1:
+                spec_cnn3 = spec_cnn2
+            else:
+                spec_cnn3 = Conv2D(filters=nb_cnn2d_filt[i], kernel_size=(3, 3), padding='same')(spec_cnn3)
+                spec_cnn3 = BatchNormalization()(spec_cnn3)
+                spec_cnn3 = Activation('relu')(spec_cnn3)
+                spec_cnn3 = MaxPooling2D(pool_size=(1, f_pool_size[i]))(spec_cnn3)
+        #spec_cnn = Dropout(dropout_rate)(spec_cnn)
+    spec_cnn2 = BilinearUpsampling((1, 4))(spec_cnn2)
+    spec_cnn3 = BilinearUpsampling((1, 2))(spec_cnn3)
+    spec_cnn = Concatenate(axis=2)([spec_cnn, spec_cnn2, spec_cnn3])
+    """    
+    
     # ASPP module
     atrous_rates = (6, 12, 18)
     b0 = Conv2D(64, (1, 1), padding='same', use_bias=False, name='aspp0')(spec_cnn)
@@ -255,9 +259,9 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
 
     # concatenate ASPP branches & project
     spec_cnn = Concatenate()([b4, b0, b1, b2, b3])
-    """
-    spec_cnn = Permute((2, 1, 3))(spec_cnn)
+    
     # RNN
+    spec_cnn = Permute((2, 1, 3))(spec_cnn)
     spec_rnn = Reshape((data_out[0][-2], -1))(spec_cnn)
     for nb_rnn_filt in rnn_size:
         spec_rnn = Bidirectional(
@@ -269,14 +273,14 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
             
     # DOA branch
     for i, convCnt in enumerate(f_pool_size):
-        doa_cnn = Conv2D(filters=nb_cnn2d_filt, kernel_size=(3, 3), padding='same')(doa_cnn)
+        doa_cnn = Conv2D(filters=nb_cnn2d_filt[i], kernel_size=(3, 3), padding='same')(doa_cnn)
         doa_cnn = BatchNormalization()(doa_cnn)
         doa_cnn = Activation('relu')(doa_cnn)
         doa_cnn = MaxPooling2D(pool_size=(t_pool_size[i], f_pool_size[i]))(doa_cnn)
-        doa_cnn = Dropout(dropout_rate)(doa_cnn)
-        
-    doa_cnn = Permute((2, 1, 3))(doa_cnn)
+        #doa_cnn = Dropout(dropout_rate)(doa_cnn)
+    
     # RNN
+    doa_cnn = Permute((2, 1, 3))(doa_cnn)
     doa_rnn = Reshape((data_out[0][-2], -1))(doa_cnn)
     for nb_rnn_filt in rnn_size:
         doa_rnn = Bidirectional(
@@ -286,16 +290,46 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
         )(doa_rnn)
    
 
+
+    # FC - SRC
+    src = src_rnn
+    for nb_fnn_filt in fnn_size:
+        src = TimeDistributed(Dense(nb_fnn_filt))(src)
+        src = Dropout(dropout_rate)(src)
+    src1 = src
+    src = TimeDistributed(Dense(data_out[2][-1]))(src)
+    src = Activation('softmax', name='src_out')(src)
+    
+    # FC - SAD
+    sad = sad_rnn
+    for nb_fnn_filt in fnn_size:
+        sad = TimeDistributed(Dense(nb_fnn_filt))(sad)
+        sad = Dropout(dropout_rate)(sad)
+    sad1 = sad
+    sad = GlobalAveragePooling1D()(sad)
+    #sad1 = sad
+    sad = Dense(data_out[3][-1])(sad)
+    sad = Activation('sigmoid', name='sad_out')(sad)    
+                            
+    # FC - DOA_only
+    doa_only = doa_only_rnn
+    for nb_fnn_filt in fnn_size:
+        doa_only = TimeDistributed(Dense(nb_fnn_filt))(doa_only)
+        doa_only = Dropout(dropout_rate)(doa_only)
+    doa_only1 = doa_only
+    doa_only = TimeDistributed(Dense(data_out[4][-1]))(doa_only)
+    doa_only = Activation('tanh', name='doa_only_out')(doa_only)
+    
+
     # FC - SED
     sed = spec_rnn
     for nb_fnn_filt in fnn_size:
         sed = TimeDistributed(Dense(nb_fnn_filt))(sed)
         sed = Dropout(dropout_rate)(sed)
-    sed = Concatenate(axis=2)([sed, src1, sad1])
+    #sed = Multiply(name="sed_x_sad")([sed, Activation('sigmoid')(sad1)])
+    #sed = Concatenate(axis=2)([sed, src1, sad1])
     sed = TimeDistributed(Dense(data_out[0][-1]))(sed)
     sed = Activation('sigmoid', name='sed_out')(sed)
-#    sed = Multiply(name="sed_x_sad")([sed, sad])
-#    sed = Multiply(name="sed_out")([sed, src])
         
     
     # FC - DOA
@@ -303,20 +337,19 @@ def get_model(data_in, data_out, dropout_rate, nb_cnn2d_filt, f_pool_size, t_poo
     for nb_fnn_filt in fnn_size:
         doa = TimeDistributed(Dense(nb_fnn_filt))(doa)
         doa = Dropout(dropout_rate)(doa)
-    doa = Concatenate(axis=2)([doa, doa_only1])
+    #doa = Concatenate(axis=2)([doa, doa_only1])
     doa = TimeDistributed(Dense(data_out[1][-1]))(doa)
     doa = Activation('tanh', name='doa_out')(doa)
-#    doa = Multiply(name="doa_x_src")([doa, src])
     doa = Multiply(name="doa_x_sed")([doa, Concatenate(axis=-1)([sed, sed, sed])])
 
     model = None
     if doa_objective is 'mse':
-        model = Model(inputs=spec_start, outputs=[sed, doa, src])
+        model = Model(inputs=spec_start, outputs=[sed, doa])
         model.compile(optimizer=Adam(lr=0.001), loss=['binary_crossentropy', 'mse', 'mean_squared_error'], loss_weights=weights)
     elif doa_objective is 'masked_mse':
         doa_concat = Concatenate(axis=-1, name='doa_concat')([sed, doa])
         model = Model(inputs=spec_start, outputs=[sed, doa_concat, src, sad, doa_only])
-        model.compile(optimizer=Adam(lr=0.001), loss=['binary_crossentropy', masked_mse, 'binary_crossentropy', 'binary_crossentropy', 'mean_squared_error'], loss_weights=weights, metrics=['accuracy'])
+        model.compile(optimizer=Adam(lr=0.001), loss=['binary_crossentropy', masked_mse, 'categorical_crossentropy', 'binary_crossentropy', 'mean_squared_error'], loss_weights=weights, metrics=['accuracy'])
     else:
         print('ERROR: Unknown doa_objective: {}'.format(doa_objective))
         exit()
@@ -352,11 +385,88 @@ def pit_mse(y_gt, model_out):
     return loss
 
 
+# ダイス係数を計算する関数
+def dice_coef(y_true, y_pred):
+    y_true = K.flatten(y_true)
+    y_pred = K.flatten(y_pred)
+    intersection = K.sum(y_true * y_pred)
+    return 2.0 * intersection / (K.sum(y_true) + K.sum(y_pred) + 1)
+# ロス関数
+def dice_loss(y_true, y_pred):
+    return 1.0 - dice_coef(y_true, y_pred)
+
+
+def binary_focal_loss(y_true, y_pred, alpha=0.5, gamma=0.5):
+    """
+    Binary form of focal loss.
+      FL(p_t) = -alpha * (1 - p_t)**gamma * log(p_t)
+      where p = sigmoid(x), p_t = p or 1 - p depending on if the label is 1 or 0, respectively.
+    References:
+        https://arxiv.org/pdf/1708.02002.pdf
+    Usage:
+     model.compile(loss=[binary_focal_loss(alpha=.25, gamma=2)], metrics=["accuracy"], optimizer=adam)
+
+    :param y_true: A tensor of the same shape as `y_pred`
+    :param y_pred:  A tensor resulting from a sigmoid
+    :return: Output tensor.
+    """
+    pt_1 = tf.where(tf.equal(y_true, 1), y_pred, tf.ones_like(y_pred))
+    pt_0 = tf.where(tf.equal(y_true, 0), y_pred, tf.zeros_like(y_pred))
+
+    epsilon = K.epsilon()
+    # clip to prevent NaN's and Inf's
+    pt_1 = K.clip(pt_1, epsilon, 1. - epsilon)
+    pt_0 = K.clip(pt_0, epsilon, 1. - epsilon)
+
+    return -K.mean(alpha * K.pow(1. - pt_1, gamma) * K.log(pt_1)) \
+            -K.mean((1 - alpha) * K.pow(pt_0, gamma) * K.log(1. - pt_0))
+
+def categorical_focal_loss(y_true, y_pred, alpha=0.5, gamma=0.5):
+    """
+    Softmax version of focal loss.
+        m
+    FL = ∑  -alpha * (1 - p_o,c)^gamma * y_o,c * log(p_o,c)
+        c=1
+    where m = number of classes, c = class and o = observation
+    Parameters:
+        alpha -- the same as weighing factor in balanced cross entropy
+        gamma -- focusing parameter for modulating factor (1-p)
+    Default value:
+        gamma -- 2.0 as mentioned in the paper
+        alpha -- 0.25 as mentioned in the paper
+    References:
+        Official paper: https://arxiv.org/pdf/1708.02002.pdf
+        https://www.tensorflow.org/api_docs/python/tf/keras/backend/categorical_crossentropy
+    Usage:
+        model.compile(loss=[categorical_focal_loss(alpha=.25, gamma=2)], metrics=["accuracy"], optimizer=adam)
+
+    :param y_true: A tensor of the same shape as `y_pred`
+    :param y_pred: A tensor resulting from a softmax
+    :return: Output tensor.
+    """
+
+    # Scale predictions so that the class probas of each sample sum to 1
+    y_pred /= K.sum(y_pred, axis=-1, keepdims=True)
+
+    # Clip the prediction value to prevent NaN's and Inf's
+    epsilon = K.epsilon()
+    y_pred = K.clip(y_pred, epsilon, 1. - epsilon)
+
+    # Calculate Cross Entropy
+    cross_entropy = -y_true * K.log(y_pred)
+
+    # Calculate Focal Loss
+    loss = alpha * K.pow(1 - y_pred, gamma) * cross_entropy
+
+    # Compute mean loss in mini_batch
+    return K.mean(loss, axis=1)
+
+
 def load_seld_model(model_file, doa_objective):
     if doa_objective is 'mse':
         return load_model(model_file)
     elif doa_objective is 'masked_mse':
-        return load_model(model_file, custom_objects={'masked_mse': masked_mse, 'pit_mse': pit_mse, 'BilinearUpsampling': BilinearUpsampling})
+        return load_model(model_file, custom_objects={'masked_mse': masked_mse, 'pit_mse': pit_mse, 'dice_loss': dice_loss, 'binary_focal_loss': binary_focal_loss, 'categorical_focal_loss': categorical_focal_loss, 'BilinearUpsampling': BilinearUpsampling})
     else:
         print('ERROR: Unknown doa objective: {}'.format(doa_objective))
         exit()
